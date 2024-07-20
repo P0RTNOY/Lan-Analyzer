@@ -8,12 +8,17 @@ import subprocess
 window = tk.Tk()
 window.title("LAN Analyzer")
 
-# Function to perform Nmap scan
 def nmap_scan():
     target = entry.get().strip()
     interface = interface_var.get().strip()
+    if not target:
+        messagebox.showerror("Error", "Please enter a target IP address.")
+        return
+    if not interface:
+        messagebox.showerror("Error", "Please select a network interface.")
+        return
+
     try:
-        # Run Nmap with sudo
         nmap_command = ['sudo', 'nmap', '-sS', '-Pn', '-e', interface, target]
         nmap_process = subprocess.Popen(nmap_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
         
@@ -27,14 +32,13 @@ def nmap_scan():
         threading.Thread(target=read_nmap_output, args=(nmap_process,)).start()
 
     except subprocess.CalledProcessError as e:
-        error_message = e.stderr.decode('utf-8') if e.stderr else str(e)
+        error_message = e.stderr if e.stderr else str(e)
         messagebox.showerror("Error", f"Nmap command returned non-zero exit status: {e.returncode}\n{error_message}")
     except FileNotFoundError:
         messagebox.showerror("Error", "Nmap command not found. Please install Nmap.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-# Function to perform P0F analysis
 def p0f_scan():
     interface = interface_var.get().strip()
     valid_interfaces = get_if_list()
@@ -43,7 +47,6 @@ def p0f_scan():
         return
 
     try:
-        # Command to execute p0f with sudo
         p0f_command = ['sudo', 'p0f', '-i', interface]
         p0f_process = subprocess.Popen(p0f_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
@@ -51,7 +54,6 @@ def p0f_scan():
             output_text.insert(tk.END, "P0F Analysis Results:\n")
             for line in process.stdout:
                 output_text.insert(tk.END, f'P0F Output: {line}')
-                # Observe traffic: You can process each line of output here for real-time analysis
 
         def handle_p0f_error(process):
             for line in process.stderr:
@@ -62,16 +64,18 @@ def p0f_scan():
         threading.Thread(target=handle_p0f_error, args=(p0f_process,), daemon=True).start()
 
     except subprocess.CalledProcessError as e:
-        error_message = e.stderr.decode('utf-8') if e.stderr else str(e)
+        error_message = e.stderr if e.stderr else str(e)
         messagebox.showerror("Error", f"P0F command returned non-zero exit status: {e.returncode}\n{error_message}")
     except FileNotFoundError:
         messagebox.showerror("Error", "P0F command not found. Please install P0F via Homebrew.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-# Function to perform Scapy packet sniffing
 def scapy_sniff():
     interface = interface_var.get().strip()
+    if not interface:
+        messagebox.showerror("Error", "Please select a network interface.")
+        return
 
     def packet_callback(packet):
         if IP in packet and UDP in packet:
@@ -80,8 +84,8 @@ def scapy_sniff():
             src_port = packet[UDP].sport
             dst_port = packet[UDP].dport
             protocol = "UDP"
-            payload = packet[UDP].payload  # Get the payload (data) of the UDP packet
-            length = len(packet)  # Get the length of the packet
+            payload = packet[UDP].payload
+            length = len(packet)
 
             output_text.insert(tk.END, f'Scapy Packet:\n')
             output_text.insert(tk.END, f'Source IP: {src_ip}, Source Port: {src_port}\n')
@@ -92,43 +96,40 @@ def scapy_sniff():
 
     try:
         sniff(iface=interface, prn=packet_callback, count=10, timeout=10)
+    except PermissionError:
+        messagebox.showerror("Error", "Scapy requires root permissions. Please run the application with sudo.")
     except Exception as e:
         messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-# Function to run Scapy sniffing in a separate thread
 def scapy_sniff_thread():
     thread = threading.Thread(target=scapy_sniff)
     thread.start()
 
-# Get list of valid network interfaces
-valid_interfaces = get_if_list()
-
-# Layout for input and buttons
-entry_label = tk.Label(window, text="Target (IP, Range, Subnet, Hostname):")
-entry_label.pack()
-
-entry = tk.Entry(window, width=50)
-entry.pack()
-
-interface_label = tk.Label(window, text="Select Interface:")
+# Define UI Elements
+interface_var = tk.StringVar()
+interface_label = tk.Label(window, text="Network Interface:")
 interface_label.pack()
 
-interface_var = tk.StringVar()
-interface_dropdown = ttk.Combobox(window, textvariable=interface_var, values=valid_interfaces, state="readonly")
-interface_dropdown.pack()
+interfaces = get_if_list()
+interface_menu = ttk.Combobox(window, textvariable=interface_var, values=interfaces)
+interface_menu.pack()
 
-nmap_button = tk.Button(window, text="Nmap Scan", command=nmap_scan)
+entry_label = tk.Label(window, text="Target IP Address:")
+entry_label.pack()
+entry = tk.Entry(window)
+entry.pack()
+
+nmap_button = tk.Button(window, text="Run Nmap Scan", command=nmap_scan)
 nmap_button.pack()
 
-p0f_button = tk.Button(window, text="P0F Analysis", command=p0f_scan)
+p0f_button = tk.Button(window, text="Run P0F Analysis", command=p0f_scan)
 p0f_button.pack()
 
-scapy_button = tk.Button(window, text="Scapy Sniff", command=scapy_sniff_thread)
+scapy_button = tk.Button(window, text="Run Scapy Sniff", command=scapy_sniff_thread)
 scapy_button.pack()
 
-# Output area
 output_text = scrolledtext.ScrolledText(window, width=80, height=20)
 output_text.pack()
 
-# Start the Tkinter event loop
+# Run the Tkinter event loop
 window.mainloop()
