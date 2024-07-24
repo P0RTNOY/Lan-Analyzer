@@ -1,0 +1,2 @@
+table <blocked_websites> persist
+block return out proto tcp to <blocked_websites>
